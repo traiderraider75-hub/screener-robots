@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Screener Robots</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header id="topbar">
+    <div class="logo">SCREENER<span>ROBOTS</span></div>
+    <div id="selinfo" class="selinfo">
+      <span id="sel-key" class="dim">инструмент не выбран</span>
+      <span id="sel-price" class="price"></span>
+      <span id="sel-bid" class="bid"></span>
+      <span id="sel-ask" class="ask"></span>
+    </div>
+    <div id="status" class="status"><span class="dot"></span><span id="status-text">подключение…</span></div>
+    <div id="stats" class="stats"></div>
+  </header>
+
+  <main>
+    <section id="table-panel">
+      <div class="panel-title table-head-row">
+        <span>Роботы в стакане <span id="rows-count" class="dim"></span></span>
+        <span class="table-head-controls">
+          <button id="scan-filter" class="btn-filter" title="Только: топ роста + сделки 24ч + RVOL≥5">★ фильтр</button>
+          <input id="filter" type="text" placeholder="фильтр по монете…" autocomplete="off" />
+        </span>
+      </div>
+      <div class="table-wrap">
+        <table id="screener">
+          <thead>
+            <tr>
+              <th>Инструмент</th>
+              <th>Биржа</th>
+              <th>Балл</th>
+              <th>Радар</th>
+              <th>Рост 24ч</th>
+              <th>Сделок 24ч</th>
+              <th>RVOL</th>
+              <th>Направление</th>
+              <th>Такт</th>
+              <th>Принты</th>
+              <th>Сила</th>
+              <th>Фликер</th>
+              <th>Спуфинг</th>
+              <th>Айсберг</th>
+              <th>Реакция</th>
+              <th>Длит., с</th>
+            </tr>
+          </thead>
+          <tbody id="screener-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="indicator-panel">
+      <div class="panel-title">BID / ASK <span id="ind-symbol" class="ind-symbol"></span><span class="dim"> — колесо = время · Shift+колесо = высота · драг = история · 2×клик = LIVE</span></div>
+      <canvas id="indicator"></canvas>
+      <div id="robot-detail" class="robot-detail dim">Кликните по инструменту в таблице</div>
+    </section>
+  </main>
+
+  <script src="indicator.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

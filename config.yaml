@@ -1,0 +1,45 @@
+exchanges:
+  - binance
+  - mexc
+  - bitget
+  - gate
+
+monitor:
+  mode: all              # all = все фьючерсы (радар), top = только топ по обороту
+  top_n: 15              # сколько топ-символов держать в пуле постоянно
+  pool_max: 200          # макс. символов с полными детекторами
+  demote_after_min: 10   # минуты тишины до выгона из пула
+  radar_threshold: 50    # suspicion для promotion из радара
+
+analysis_window_min: 10
+
+detector:
+  size_k: 3.0            # кандидат: сделка >= k * типичный (q25) размер
+  min_prints: 5          # минимум ударов для детекции робота
+  tick_tolerance: 0.15   # допуск разброса интервалов (±15%)
+  min_regularity: 0.6    # доля интервалов в такте по окну
+  tick_bucket_ms: 10     # округление такта, мс
+
+micro:
+  iceberg_min_exec: 1.0  # минимальный объём для айсберга (базовых ед.)
+
+scanner:
+  poll_s: 30             # опрос тикеров бирж
+  top_gainers_n: 50      # топ роста на биржу
+  min_trades_24h: 5000   # порог сделок 24ч (только Binance)
+  rvol_threshold: 5.0    # объём часа >= 5x среднего
+  baseline_hours: 24
+  binance_priority: true # кандидаты Binance первыми
+
+history:
+  path: history.db
+  retention_h: 24            # хранить 24 часа
+  auto_record_robots: true   # авто-запись символов с подтверждённым роботом
+
+alerts:
+  enabled: true
+  sound: true
+
+ui:
+  screener_poll_ms: 1000
+  indicator_poll_ms: 300
