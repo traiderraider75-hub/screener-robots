@@ -37,6 +37,12 @@ class Scanner:
         self._gainers: Dict[str, List[str]] = {}
         self._bootstrapped: set = set()
         self._klines_budget = 400
+        self.allowed_symbols: set = set()  # {(exch, sym)} вечных фьючерсов; пусто = без фильтра
+
+    def _is_perp(self, exch: str, sym: str) -> bool:
+        if not self.allowed_symbols:
+            return True
+        return (exch, sym) in self.allowed_symbols
 
     async def run_loop(self, get_json) -> None:
         while True:
@@ -56,7 +62,7 @@ class Scanner:
 
         data = await get_json(TICKER_URLS["binance"])
         for t in data:
-            if t["symbol"].endswith("USDT"):
+            if t["symbol"].endswith("USDT") and "_" not in t["symbol"] and self._is_perp("binance", t["symbol"]):
                 raw[("binance", t["symbol"])] = {
                     "growth24": float(t["priceChangePercent"]),
                     "count24": int(t["count"]),
@@ -67,7 +73,7 @@ class Scanner:
         try:
             data = await get_json(TICKER_URLS["mexc"])
             for t in data.get("data", []):
-                if t["symbol"].endswith("_USDT"):
+                if t["symbol"].endswith("_USDT") and self._is_perp("mexc", t["symbol"]):
                     raw[("mexc", t["symbol"])] = {
                         "growth24": float(t.get("riseFallRate") or 0) * 100.0,
                         "count24": None,
@@ -80,7 +86,7 @@ class Scanner:
         try:
             data = await get_json(TICKER_URLS["bitget"])
             for t in data.get("data", []):
-                if t["symbol"].endswith("USDT"):
+                if t["symbol"].endswith("USDT") and self._is_perp("bitget", t["symbol"]):
                     raw[("bitget", t["symbol"])] = {
                         "growth24": float(t.get("change24h") or 0) * 100.0,
                         "count24": None,
@@ -93,7 +99,7 @@ class Scanner:
         try:
             data = await get_json(TICKER_URLS["gate"])
             for t in data:
-                if t["contract"].endswith("_USDT"):
+                if t["contract"].endswith("_USDT") and self._is_perp("gate", t["contract"]):
                     raw[("gate", t["contract"])] = {
                         "growth24": float(t.get("change_percentage") or 0),
                         "count24": None,

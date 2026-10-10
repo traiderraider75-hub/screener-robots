@@ -101,16 +101,12 @@ class Screener:
         except Exception as e:
             log.error("[%s] discovery failed: %s: %s", conn.name, type(e).__name__, e)
             return
-        top = set(await self._top_symbols(conn))
+        for s in symbols:
+            self.scanner.allowed_symbols.add((conn.name, s))
+        top = set(symbols[: self.top_n])
         for s in top:
             self.pool[(conn.name, s)] = {"reason": "top", "since": int(time.time() * 1000)}
         await conn.run(symbols)
-
-    async def _top_symbols(self, conn: BaseConnector) -> List[str]:
-        try:
-            return await conn.discover_top(self.top_n)
-        except Exception:
-            return []
 
     async def _maintenance_loop(self) -> None:
         while True:
