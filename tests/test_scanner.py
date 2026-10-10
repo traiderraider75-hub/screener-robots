@@ -95,3 +95,68 @@ class TestRadarHours(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMarketRows(unittest.TestCase):
+    def _make(self):
+        from core.screener import Screener
+        cfg = {"alerts": {"enabled": False}, "scanner": {"market_rows_limit": 100}}
+        s = Screener(cfg)
+        return s
+
+    def test_growth_sorted_max_first(self):
+        s = self._make()
+        s.scanner._tickers = {
+            ("binance", "LOW"): {"growth24": 0.5, "count24": 100, "quote_vol24": 1e6},
+            ("binance", "TOP"): {"growth24": 42.0, "count24": 200, "quote_vol24": 1e6},
+            ("binance", "NEG"): {"growth24": -3.0, "count24": 300, "quote_vol24": 1e6},
+            ("gate", "GTOP"): {"growth24": 15.0, "count24": None, "quote_vol24": 1e6},
+        }
+        rows = s.growth_rows(10)
+        self.assertEqual(rows[0]["symbol"], "TOP")
+        self.assertEqual(rows[1]["symbol"], "GTOP")
+        self.assertEqual(rows[2]["symbol"], "LOW")
+        self.assertEqual(rows[3]["symbol"], "NEG")
+
+    def test_trades_binance_only_sorted(self):
+        s = self._make()
+        s.scanner._tickers = {
+            ("binance", "A"): {"growth24": 1.0, "count24": 900000, "quote_vol24": 1e6},
+            ("binance", "B"): {"growth24": 2.0, "count24": 1500000, "quote_vol24": 1e6},
+            ("gate", "C"): {"growth24": 3.0, "count24": None, "quote_vol24": 1e6},
+            ("mexc", "D"): {"growth24": 4.0, "count24": None, "quote_vol24": 1e6},
+        }
+        rows = s.trades_rows(10)
+        self.assertEqual([r["symbol"] for r in rows], ["B", "A"])
+        self.assertEqual(rows[0]["count24"], 1500000)
+
+    def test_limit(self):
+        s = self._make()
+        s.scanner._tickers = {
+            ("binance", "S%03d" % i): {"growth24": float(i), "count24": i, "quote_vol24": 1.0}
+            for i in range(200)
+        }
+        self.assertEqual(len(s.growth_rows(50)), 50)
+        self.assertEqual(len(s.trades_rows(30)), 30)
+
+    def test_robot_scores_attached(self):
+        from core.models import RobotSignal
+
+        s = self._make()
+        s.scanner._tickers = {
+            ("binance", "R"): {"growth24": 5.0, "count24": 100, "quote_vol24": 1.0},
+        }
+        class FakeDet:
+            def all_signals(self_inner):
+                return [RobotSignal(
+                    exchange="binance", symbol="R", tick_ms=500, prints=6, strength=1.0,
+                    buy_volume=1.0, sell_volume=0.0, avg_size=0.2, first_ms=0, last_ms=0,
+                    score=77, regularity=1.0, market_reaction="WITH", fingerprint="t500",
+                )]
+        s.detector = FakeDet()
+        rows = s.growth_rows(10)
+        self.assertEqual(rows[0]["score"], 77)
+
+
+if __name__ == "__main__":
+    unittest.main()

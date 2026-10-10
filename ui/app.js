@@ -48,6 +48,8 @@
 
   var filterText = "";
   var scanOnly = false;
+  var activeTab = "robots";
+  var tableHead = document.getElementById("table-head");
   document.getElementById("filter").addEventListener("input", function (e) {
     filterText = e.target.value.trim().toUpperCase();
     renderRows(lastRows);
@@ -57,6 +59,80 @@
     e.target.classList.toggle("active", scanOnly);
     renderRows(lastRows);
   });
+
+  var tabsEl = document.querySelectorAll(".tab");
+  tabsEl.forEach(function (b) {
+    b.addEventListener("click", function () {
+      tabsEl.forEach(function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+      activeTab = b.dataset.tab;
+      knownKeys = {};
+      renderHead();
+      renderRows(lastRows);
+    });
+  });
+
+  var HEADS = {
+    robots: [
+      "Инструмент", "Биржа", "Балл", "Радар", "Рост 24ч", "Сделок 24ч", "RVOL",
+      "Направление", "Такт", "Принты", "Сила", "Фликер", "Спуфинг", "Айсберг", "Реакция", "Длит., с",
+    ],
+    growth: ["Инструмент", "Биржа", "Рост 24ч", "RVOL", "Сделок 24ч", "Балл", "Радар"],
+    trades: ["Инструмент", "Биржа", "Сделок 24ч", "RVOL", "Рост 24ч", "Балл", "Радар"],
+  };
+
+  function renderHead() {
+    var html = "<tr>";
+    for (var i = 0; i < HEADS[activeTab].length; i++) {
+      html += "<th>" + HEADS[activeTab][i] + "</th>";
+    }
+    tableHead.innerHTML = html + "</tr>";
+  }
+
+  function rowHtml(r) {
+    var key = r.exchange.toLowerCase() + ":" + r.symbol;
+    var selected = key === selectedKey ? " selected" : "";
+    var fresh = "";
+    if (!knownKeys[r.key]) {
+      fresh = " new-robot";
+      knownKeys[r.key] = true;
+    }
+    if (activeTab === "robots") {
+      var cls = "dir-" + r.direction;
+      var rcls = "reaction-" + r.reaction;
+      return (
+        '<tr data-key="' + key + '"' + selected + fresh + ">" +
+        "<td>" + r.symbol + "</td>" +
+        "<td>" + r.exchange + "</td>" +
+        '<td class="score">' + r.score + "</td>" +
+        '<td class="radar' + (r.radar >= 50 ? " hot" : r.radar >= 25 ? " warm" : "") + '">' + (r.radar >= 25 ? r.radar : "—") + "</td>" +
+        growthCell(r.growth24) +
+        "<td>" + (r.count24 !== null && r.count24 !== undefined ? fmtNum(r.count24, 0) : "—") + "</td>" +
+        rvolCell(r.rvol, r.match) +
+        '<td class="' + cls + '">' + (r.direction === "LONG" ? "▲ LONG" : r.direction === "SHORT" ? "▼ SHORT" : "—") + "</td>" +
+        "<td>" + (r.tick_ms ? r.tick_ms + " мс" : "—") + "</td>" +
+        "<td>" + (r.prints || "—") + "</td>" +
+        "<td>" + (r.strength ? fmtNum(r.strength, 3) : "—") + "</td>" +
+        microCell(r.hft, r.hft_info, "hft") +
+        microCell(r.spoof, r.spoof_info, "spoof") +
+        microCell(r.iceberg, r.iceberg_info, "iceberg") +
+        '<td class="' + rcls + '">' + (r.reaction === "WITH" ? "по рынку" : r.reaction === "AGAINST" ? "против рынка" : "—") + "</td>" +
+        "<td>" + (r.duration_s ? r.duration_s + "с" : "—") + "</td>" +
+        "</tr>"
+      );
+    }
+    return (
+      '<tr data-key="' + key + '"' + selected + fresh + ">" +
+      "<td>" + r.symbol + "</td>" +
+      "<td>" + r.exchange + "</td>" +
+      growthCell(r.growth24) +
+      rvolCell(r.rvol, r.match) +
+      "<td>" + (r.count24 !== null && r.count24 !== undefined ? fmtNum(r.count24, 0) : "—") + "</td>" +
+      '<td class="score">' + (r.score || "—") + "</td>" +
+      '<td class="radar' + (r.radar >= 50 ? " hot" : r.radar >= 25 ? " warm" : "") + '">' + (r.radar >= 25 ? r.radar : "—") + "</td>" +
+      "</tr>"
+    );
+  }
 
   var lastRows = [];
 
@@ -74,34 +150,7 @@
     rowsCount.textContent = visible.length ? "(" + visible.length + ")" : "";
     var html = "";
     for (var i = 0; i < visible.length; i++) {
-      var r = visible[i];
-      var cls = "dir-" + r.direction;
-      var rcls = "reaction-" + r.reaction;
-      var selected = r.exchange.toLowerCase() + ":" + r.symbol === selectedKey ? " selected" : "";
-      var fresh = "";
-      if (!knownKeys[r.key]) {
-        fresh = " new-robot";
-        knownKeys[r.key] = true;
-      }
-      html +=
-        '<tr data-key="' + r.exchange.toLowerCase() + ":" + r.symbol + '"' + selected + fresh + ">" +
-        "<td>" + r.symbol + "</td>" +
-        "<td>" + r.exchange + "</td>" +
-        '<td class="score">' + r.score + "</td>" +
-        '<td class="radar' + (r.radar >= 50 ? " hot" : r.radar >= 25 ? " warm" : "") + '">' + (r.radar >= 25 ? r.radar : "—") + "</td>" +
-        growthCell(r.growth24) +
-        "<td>" + (r.count24 !== null && r.count24 !== undefined ? fmtNum(r.count24, 0) : "—") + "</td>" +
-        rvolCell(r.rvol, r.match) +
-        '<td class="' + cls + '">' + (r.direction === "LONG" ? "▲ LONG" : r.direction === "SHORT" ? "▼ SHORT" : "—") + "</td>" +
-        "<td>" + (r.tick_ms ? r.tick_ms + " мс" : "—") + "</td>" +
-        "<td>" + (r.prints || "—") + "</td>" +
-        "<td>" + (r.strength ? fmtNum(r.strength, 3) : "—") + "</td>" +
-        microCell(r.hft, r.hft_info, "hft") +
-        microCell(r.spoof, r.spoof_info, "spoof") +
-        microCell(r.iceberg, r.iceberg_info, "iceberg") +
-        '<td class="' + rcls + '">' + (r.reaction === "WITH" ? "по рынку" : r.reaction === "AGAINST" ? "против рынка" : "—") + "</td>" +
-        "<td>" + (r.duration_s ? r.duration_s + "с" : "—") + "</td>" +
-        "</tr>";
+      html += rowHtml(visible[i]);
     }
     tbody.innerHTML = html;
     statusDot.classList.add("ok");
@@ -138,9 +187,15 @@
 
   function pollScreener() {
     if (api()) {
-      api().get_screener().then(function (json) {
-        try { renderRows(JSON.parse(json)); } catch (err) {}
-      });
+      if (activeTab === "robots") {
+        api().get_screener().then(function (json) {
+          try { renderRows(JSON.parse(json)); } catch (err) {}
+        });
+      } else {
+        api().get_market_table(activeTab).then(function (json) {
+          try { renderRows(JSON.parse(json)); } catch (err) {}
+        });
+      }
     }
     setTimeout(pollScreener, 1000);
   }
@@ -285,6 +340,7 @@
 
   function waitApi() {
     if (api()) {
+      renderHead();
       pollScreener();
       pollIndicator();
       pollStats();

@@ -140,6 +140,24 @@ tbody tr.new-robot { animation: flash 1.2s ease-out; }
 
 .table-head-controls { display: flex; gap: 8px; align-items: center; }
 
+.tabs { display: flex; gap: 4px; }
+.tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: 2px solid transparent;
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 12px;
+  cursor: pointer;
+  outline: none;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
 .stats { color: var(--dim); white-space: nowrap; }
 
 .table-head-row {

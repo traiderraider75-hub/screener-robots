@@ -371,6 +371,65 @@ class Screener:
         rows.sort(key=sort_key)
         return rows[:300]
 
+    def _market_row(self, exch: str, sym: str, ticker: dict) -> dict:
+        return {
+            "key": "{}:{}".format(exch, sym),
+            "exchange": exch.upper(),
+            "symbol": sym,
+            "growth24": ticker["growth24"],
+            "count24": ticker["count24"],
+            "quote_vol24": ticker["quote_vol24"],
+            "rvol": round(self.scanner.rvol(exch, sym), 1),
+            "radar": self.radar.score(exch, sym),
+            "score": 0,
+            "prints": 0,
+            "match": self.scanner.matches(exch, sym),
+        }
+
+    def _attach_robot_scores(self, rows: List[dict]) -> None:
+        scores = {}
+        for sig in self.detector.all_signals():
+            k = (sig.exchange, sig.symbol)
+            prev = scores.get(k, (0, 0))
+            if sig.score > prev[0]:
+                scores[k] = (sig.score, sig.prints)
+        micro = self.micro.all_states()
+        for r in rows:
+            k = (r["exchange"].lower(), r["symbol"])
+            if k in scores:
+                r["score"], r["prints"] = scores[k]
+            else:
+                ms = micro.get(k)
+                if ms is not None:
+                    r["score"] = max(ms.hft, ms.spoof, ms.iceberg)
+
+    def growth_rows(self, limit: int = 100) -> List[dict]:
+        """Рейтинг всего рынка по росту 24ч (максимум вверху)."""
+        rows = []
+        for (exch, sym), t in self.scanner._tickers.items():
+            if t["growth24"] is None:
+                continue
+            rows.append(self._market_row(exch, sym, t))
+        self._attach_robot_scores(rows)
+        rows.sort(key=lambda r: (-r["growth24"], -r["rvol"]))
+        return rows[:limit]
+
+    def trades_rows(self, limit: int = 100) -> List[dict]:
+        """Рейтинг по количеству сделок 24ч (только Binance, максимум вверху)."""
+        rows = []
+        for (exch, sym), t in self.scanner._tickers.items():
+            if exch != "binance" or t["count24"] is None:
+                continue
+            rows.append(self._market_row(exch, sym, t))
+        self._attach_robot_scores(rows)
+        rows.sort(key=lambda r: (-r["count24"], -r["rvol"]))
+        return rows[:limit]
+
+    def market_rows(self, mode: str, limit: int = 100) -> List[dict]:
+        if mode == "trades":
+            return self.trades_rows(limit)
+        return self.growth_rows(limit)
+
     def _drain_micro_alerts(self) -> None:
         for e in self.micro.new_spoof_events():
             self._rank_event(e.get("exchange", ""), e.get("symbol", ""))

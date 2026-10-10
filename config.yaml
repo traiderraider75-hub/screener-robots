@@ -30,6 +30,7 @@ scanner:
   rvol_threshold: 5.0    # объём часа >= 5x среднего
   baseline_hours: 24
   binance_priority: true # кандидаты Binance первыми
+  market_rows_limit: 100 # строк во вкладках-рейтингах
 
 history:
   path: history.db

@@ -42,6 +42,11 @@ class Bridge:
     def get_screener(self):
         return json.dumps(self._on_loop(self.screener.screener_rows))
 
+    def get_market_table(self, mode="growth"):
+        mode = mode if mode in ("growth", "trades") else "growth"
+        limit = int(self.screener.config.get("scanner", {}).get("market_rows_limit", 100))
+        return json.dumps(self._on_loop(lambda: self.screener.market_rows(mode, limit)))
+
     def get_symbols(self):
         return json.dumps(self._on_loop(self.screener.symbol_list))
 

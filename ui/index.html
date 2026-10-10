@@ -21,7 +21,11 @@
   <main>
     <section id="table-panel">
       <div class="panel-title table-head-row">
-        <span>Роботы в стакане <span id="rows-count" class="dim"></span></span>
+        <span class="tabs">
+          <button class="tab active" data-tab="robots">Роботы</button>
+          <button class="tab" data-tab="growth">Топ роста</button>
+          <button class="tab" data-tab="trades">Сделки</button>
+        </span>
         <span class="table-head-controls">
           <button id="scan-filter" class="btn-filter" title="Только: топ роста + сделки 24ч + RVOL≥5">★ фильтр</button>
           <input id="filter" type="text" placeholder="фильтр по монете…" autocomplete="off" />
@@ -29,26 +33,7 @@
       </div>
       <div class="table-wrap">
         <table id="screener">
-          <thead>
-            <tr>
-              <th>Инструмент</th>
-              <th>Биржа</th>
-              <th>Балл</th>
-              <th>Радар</th>
-              <th>Рост 24ч</th>
-              <th>Сделок 24ч</th>
-              <th>RVOL</th>
-              <th>Направление</th>
-              <th>Такт</th>
-              <th>Принты</th>
-              <th>Сила</th>
-              <th>Фликер</th>
-              <th>Спуфинг</th>
-              <th>Айсберг</th>
-              <th>Реакция</th>
-              <th>Длит., с</th>
-            </tr>
-          </thead>
+          <thead id="table-head"></thead>
           <tbody id="screener-body"></tbody>
         </table>
       </div>
