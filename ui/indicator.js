@@ -14,6 +14,9 @@
     scaleText: "#6e7681",
     live: "#3fb950",
     hist: "#d29922",
+    priceLine: "rgba(210, 153, 34, 0.85)",
+    priceArea: "rgba(210, 153, 34, 0.10)",
+    levelLine: "rgba(88, 166, 255, 0.55)",
   };
 
   var pxPerSec = 12;
@@ -197,6 +200,87 @@
     ctx.fillText(fmtVol(volScale), 4, 26 - 8);
 
     drawTimeAxis(mid, halfH, w, h, pxPerMs, padL, padR);
+  }
+
+  function drawPriceLine(trades, xPos, mid, halfH, w, padL, padR, startIdx, endIdx, volScale) {
+    // график цены поверх бидаск: своя шкала справа, нормирован на видимое min/max
+    var lo = Infinity, hi = -Infinity;
+    var i;
+    for (i = startIdx; i <= endIdx; i++) {
+      var p = trades[i].p;
+      if (p === undefined || p === null) continue;
+      if (p < lo) lo = p;
+      if (p > hi) hi = p;
+    }
+    if (lo === Infinity) return;
+    var pad = (hi - lo) * 0.08 || Math.max(hi * 0.0005, 0.01);
+    lo -= pad; hi += pad;
+
+    function yPos(p) {
+      // в верхнюю треть панели: центр=середина верхней зоны
+      var topZoneMid = mid - halfH * 0.35;
+      var amp = halfH * 0.6;
+      return topZoneMid - ((p - lo) / (hi - lo) - 0.5) * 2 * amp;
+    }
+
+    // заливка под линией
+    ctx.beginPath();
+    var started = false;
+    var lastX = 0, firstX = 0;
+    for (i = startIdx; i <= endIdx; i++) {
+      var tr = trades[i];
+      if (tr.p === undefined) continue;
+      var x = xPos(tr.t);
+      var y = yPos(tr.p);
+      if (!started) {
+        ctx.moveTo(x, y);
+        firstX = x;
+        started = true;
+      } else {
+        ctx.lineTo(x, y);
+      }
+      lastX = x;
+    }
+    if (!started) return;
+    ctx.strokeStyle = COLORS.priceLine;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.lineTo(lastX, mid);
+    ctx.lineTo(firstX, mid);
+    ctx.closePath();
+    ctx.fillStyle = COLORS.priceArea;
+    ctx.fill();
+
+    // шкала цены справа
+    ctx.fillStyle = COLORS.priceLine;
+    ctx.font = "9px 'SF Mono', Menlo, monospace";
+    ctx.textAlign = "right";
+    ctx.fillText(fmtPrice(hi - pad), w - 2, yPos(hi - pad) + 8);
+    ctx.fillText(fmtPrice(lo + pad), w - 2, yPos(lo + pad) + 8);
+
+    // уровни стратегии (горизонтали в диапазоне вида)
+    var levels = data.levels || [];
+    ctx.setLineDash([4, 4]);
+    for (i = 0; i < levels.length; i++) {
+      var lv = levels[i];
+      if (lv < lo || lv > hi) continue;
+      var ly = yPos(lv);
+      ctx.strokeStyle = COLORS.levelLine;
+      ctx.beginPath();
+      ctx.moveTo(padL, ly + 0.5);
+      ctx.lineTo(w - padR, ly + 0.5);
+      ctx.stroke();
+      ctx.fillStyle = COLORS.levelLine;
+      ctx.textAlign = "right";
+      ctx.fillText(fmtPrice(lv), w - 2, ly - 2);
+    }
+    ctx.setLineDash([]);
+  }
+
+  function fmtPrice(p) {
+    if (p >= 1000) return p.toFixed(0);
+    if (p >= 1) return p.toFixed(2);
+    return p.toPrecision(4);
   }
 
   function maybeFetchHistory(trades, xPos, padL) {

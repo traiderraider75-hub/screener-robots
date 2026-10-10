@@ -75,10 +75,12 @@
   var HEADS = {
     robots: [
       "Инструмент", "Биржа", "Балл", "Радар", "Рост 24ч", "Сделок 24ч", "RVOL",
-      "Направление", "Такт", "Принты", "Сила", "Фликер", "Спуфинг", "Айсберг", "Реакция", "Длит., с",
+      "Направление", "Такт", "Принты", "Сила", "Фликер", "Спуфинг", "Айсберг",
+      "Уровни", "3-й подход", "ММ", "Новости",
     ],
-    growth: ["Инструмент", "Биржа", "Рост 24ч", "RVOL", "Сделок 24ч", "Балл", "Радар"],
-    trades: ["Инструмент", "Биржа", "Сделок 24ч", "RVOL", "Рост 24ч", "Балл", "Радар"],
+    growth: ["Инструмент", "Биржа", "Рост 24ч", "RVOL", "Сделок 24ч", "Балл", "Радар", "ММ", "Новости"],
+    trades: ["Инструмент", "Биржа", "Сделок 24ч", "RVOL", "Рост 24ч", "Балл", "Радар", "ММ", "Новости"],
+    signals: ["Время", "Монета", "Биржа", "Подход", "Уровень", "Вердикт", "Почему"],
   };
 
   function renderHead() {
@@ -96,6 +98,21 @@
     if (!knownKeys[r.key]) {
       fresh = " new-robot";
       knownKeys[r.key] = true;
+    }
+    if (activeTab === "signals") {
+      var vmap = { BREAKOUT: "ПРОБОЙ", REJECT: "ОТБОЙ", UNCERTAIN: "НЕОПРЕД." };
+      var vcls = { BREAKOUT: "verdict-breakout", REJECT: "verdict-reject", UNCERTAIN: "dim" };
+      return (
+        '<tr data-key="' + key + '"' + selected + ">" +
+        "<td>" + fmtClock(r.ts) + "</td>" +
+        "<td>" + r.symbol + "</td>" +
+        "<td>" + r.exchange + "</td>" +
+        "<td>#" + r.approach_no + "</td>" +
+        "<td>" + r.level + "</td>" +
+        '<td class="' + vcls[r.verdict] + '"><b>' + vmap[r.verdict] + "</b></td>" +
+        "<td>" + (r.why || []).join("; ") + "</td>" +
+        "</tr>"
+      );
     }
     if (activeTab === "robots") {
       var cls = "dir-" + r.direction;
@@ -116,8 +133,10 @@
         microCell(r.hft, r.hft_info, "hft") +
         microCell(r.spoof, r.spoof_info, "spoof") +
         microCell(r.iceberg, r.iceberg_info, "iceberg") +
-        '<td class="' + rcls + '">' + (r.reaction === "WITH" ? "по рынку" : r.reaction === "AGAINST" ? "против рынка" : "—") + "</td>" +
-        "<td>" + (r.duration_s ? r.duration_s + "с" : "—") + "</td>" +
+        "<td>" + (r.levels || "—") + "</td>" +
+        approachCell(r.approach) +
+        mmCell(r.mm_score, r.mm_holds) +
+        newsCell(r.news) +
         "</tr>"
       );
     }
@@ -130,8 +149,34 @@
       "<td>" + (r.count24 !== null && r.count24 !== undefined ? fmtNum(r.count24, 0) : "—") + "</td>" +
       '<td class="score">' + (r.score || "—") + "</td>" +
       '<td class="radar' + (r.radar >= 50 ? " hot" : r.radar >= 25 ? " warm" : "") + '">' + (r.radar >= 25 ? r.radar : "—") + "</td>" +
+      mmCell(r.mm_score, r.mm_holds) +
+      newsCell(r.news) +
       "</tr>"
     );
+  }
+
+  function approachCell(a) {
+    if (!a) return '<td class="dim">—</td>';
+    return '<td class="warm" title="уровень ' + a.level + '"><b>#' + a.no + "</b> " + (a.direction === "support" ? "↕снизу" : "↕сверху") + "</td>";
+  }
+
+  function mmCell(score, holds) {
+    if (!score) return '<td class="dim">—</td>';
+    var cls = "rvol" + (holds ? " hot" : score >= 50 ? " warm" : "");
+    return '<td class="' + cls + '" title="' + (holds === true ? "ММ держит уровень" : holds === false ? "ММ не держит" : "") + '">' + score + (holds === true ? " ✊" : "") + "</td>";
+  }
+
+  function newsCell(n) {
+    if (n === "pos") return '<td class="growth-pos" title="позитивные новости за 4ч">📈</td>';
+    if (n === "neg") return '<td class="growth-neg" title="негативные новости за 4ч">📉</td>';
+    if (n === "neutral") return '<td class="dim" title="новости без явного сентимента">•</td>';
+    return '<td class="dim">—</td>';
+  }
+
+  function fmtClock(ts) {
+    var d = new Date(ts);
+    function p(n) { return n < 10 ? "0" + n : "" + n; }
+    return p(d.getHours()) + ":" + p(d.getMinutes());
   }
 
   var lastRows = [];
@@ -187,7 +232,11 @@
 
   function pollScreener() {
     if (api()) {
-      if (activeTab === "robots") {
+      if (activeTab === "signals") {
+        api().get_signals().then(function (json) {
+          try { renderRows(JSON.parse(json)); } catch (err) {}
+        });
+      } else if (activeTab === "robots") {
         api().get_screener().then(function (json) {
           try { renderRows(JSON.parse(json)); } catch (err) {}
         });
@@ -198,6 +247,40 @@
       }
     }
     setTimeout(pollScreener, 1000);
+  }
+
+  var verdictEl = document.getElementById("verdict");
+
+  function pollVerdict() {
+    if (api() && activeTab === "robots") {
+      api().get_verdict().then(function (json) {
+        try {
+          var v = JSON.parse(json);
+          renderVerdict(v);
+        } catch (err) {}
+      });
+    }
+    setTimeout(pollVerdict, 1000);
+  }
+
+  function renderVerdict(v) {
+    if (!v || !v.fields || (!v.recent.length && !v.fields.mm_score && !v.fields.levels)) {
+      verdictEl.innerHTML = '<span class="dim">Вердикт появится на 3-м подходе к уровню ★-монеты</span>';
+      return;
+    }
+    var f = v.fields;
+    var html = "";
+    if (v.recent.length) {
+      var s = v.recent[v.recent.length - 1];
+      var vmap = { BREAKOUT: ["ПРОБОЙ вероятнее", "verdict-breakout"], REJECT: ["ОТБОЙ вероятнее", "verdict-reject"], UNCERTAIN: ["НЕОПРЕДЕЛЁННО", "dim"] };
+      var vm = vmap[s.verdict];
+      html += "<b class='" + vm[1] + "'>" + vm[0] + "</b> · подход #" + s.approach_no + " к " + s.level + " · <span class='dim'>" + (s.why || []).join("; ") + "</span><br>";
+    }
+    html += "Уровней: <b>" + (f.levels || 0) + "</b>";
+    if (f.approach) html += " · подход: <b>#" + f.approach.no + "</b> (" + f.approach.level + ")";
+    if (f.mm_score) html += " · ММ: <b>" + f.mm_score + "</b>" + (f.mm_holds === true ? " держит ✊" : f.mm_holds === false ? " не держит" : "");
+    if (f.news) html += " · Новости: <b>" + (f.news === "pos" ? "📈 позитив" : f.news === "neg" ? "📉 негатив" : "• нейтр.") + "</b>";
+    verdictEl.innerHTML = html;
   }
 
   var pollKey = null;
@@ -245,6 +328,7 @@
           selPrice.textContent = data.price ? fmtNum(data.price, 1) : "";
           selBid.textContent = data.bid ? "bid " + fmtNum(data.bid, 1) : "";
           selAsk.textContent = data.ask ? "ask " + fmtNum(data.ask, 1) : "";
+          window.Chart.setLive(data.price);
           data.trades = tradesAll;
           window.Indicator.setData(data);
           renderDetail(data);
@@ -338,11 +422,32 @@
     });
   });
 
+  var chartSymbolEl = document.getElementById("chart-symbol");
+  var chartKey = null;
+
+  function pollChart() {
+    if (api() && selectedKey && selectedKey !== chartKey) {
+      chartKey = selectedKey;
+      chartSymbolEl.textContent = selectedKey.replace(":", " · ");
+      api().get_chart(selectedKey, 720).then(function (json) {
+        try {
+          var d = JSON.parse(json);
+          d.reset = true;
+          d.symbol = selectedKey;
+          window.Chart.setData(d);
+        } catch (err) {}
+      });
+    }
+    setTimeout(pollChart, 2000);
+  }
+
   function waitApi() {
     if (api()) {
       renderHead();
       pollScreener();
       pollIndicator();
+      pollVerdict();
+      pollChart();
       pollStats();
       setInterval(beep, 1500);
       setTimeout(function () {

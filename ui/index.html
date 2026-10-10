@@ -25,6 +25,7 @@
           <button class="tab active" data-tab="robots">Роботы</button>
           <button class="tab" data-tab="growth">Топ роста</button>
           <button class="tab" data-tab="trades">Сделки</button>
+          <button class="tab" data-tab="signals">Сигналы</button>
           <span id="rows-count" class="dim"></span>
         </span>
         <span class="table-head-controls">
@@ -40,13 +41,20 @@
       </div>
     </section>
 
+    <section id="chart-panel">
+      <div class="panel-title">График <span id="chart-symbol" class="ind-symbol"></span><span class="dim"> — 1м свечи · уровни стратегии пунктиром · колесо = зум</span></div>
+      <canvas id="chart"></canvas>
+    </section>
+
     <section id="indicator-panel">
       <div class="panel-title">BID / ASK <span id="ind-symbol" class="ind-symbol"></span><span class="dim"> — колесо = время · Shift+колесо = высота · драг = история · 2×клик = LIVE</span></div>
       <canvas id="indicator"></canvas>
+      <div id="verdict" class="verdict dim">Вердикт появится на 3-м подходе к уровню ★-монеты</div>
       <div id="robot-detail" class="robot-detail dim">Кликните по инструменту в таблице</div>
     </section>
   </main>
 
+  <script src="chart.js"></script>
   <script src="indicator.js"></script>
   <script src="app.js"></script>
 </body>

@@ -70,3 +70,48 @@ tests/test_robots_synthetic.py · test_micro_detectors.py · test_radar_history.
 - Тесты: tests/test_scanner.py (7) — гейнеры, критерии, приоритет Binance, кольцо часов
 - Живой прогон: HAEDALUSDT (рост +18.9%, RVOL 294x), MAGICUSDT, VELODROME — фильтр и
   промоушен работают; 0 ошибок, 25 тестов зелёные
+
+## ЧЕКПОИНТ 2026-10-10 (вечер) — ОСТАНОВКА
+
+### Что реализовано за сессию
+1. **Сканер** (core/scanner.py): топ роста 24ч + счётчик сделок (Binance) + RVOL 1ч≥5;
+   RVOL нормализован на долю прошедшего часа; фильтр только вечных фьючерсов (allowed_symbols
+   из discovery); вкладки-рейтинги «Топ роста» и «Сделки» (весь рынок, максимум вверху)
+2. **Уровни** (core/detectors/levels.py): зонная кластеризация свингов (зона=[min,max],
+   слияние пересекающихся, 1 касание = 1 визит >15мин), допуск = 0.5*ATR(14h) с границами
+   0.05–0.8%; живой трекинг подходов (номер подхода = touches + инкременты); raw_klines
+   хранятся для графика; живое доращивание последней свечи из ленты (_grow_candle)
+3. **ММ-детектор** (core/detectors/mm.py): двусторонность, стабильный спред, быстрые
+   восстановления уровней, инвентарное смещение, анти-спуфинг (снятие при приближении без
+   возврата ≤RESTORE_MS); holding_level() для стратегии
+4. **Стратегия** (core/strategy.py): движок «3-й подход» — на 3+ подходе к уровню ★-монеты
+   вердикт BREAKOUT/REJECT/UNCERTAIN по факторам: робот по/против движения (RobotSignal),
+   ММ держит ли уровень, новости-сентимент; алерты; table_fields(full=...) с дешёвым режимом
+5. **Новости** (core/news.py): Binance announcements (bapi endpoint, без ключей), лексикон
+   pos/neg, окно 4ч, матчинг по тикеру+алиасам
+6. **UI**: вкладки Роботы/Топ роста/Сделки/Сигналы; панель вердикта; колонки Уровни/
+   3-й подход/ММ/Новости; **отдельная свечная панель «График»** (ui/chart.js): 1м свечи
+   Binance (720), зум колесом, живая цена, уровни = полоса зоны + пунктир средней с числом
+   касаний; ценовую линию с BID/ASK убрали (чистый профиль)
+7. Мост: get_chart(key, limit) в main.py; get_verdict, get_signals, get_market_table
+
+### Известная проблема (ОТКРЫТА)
+**Уровни строятся «неправильно»** по мнению пользователя (даже после зонной кластеризации).
+Пользователь завтра пропишет ПРАВИЛА ПОСТРОЕНИЯ УРОВНЕЙ и их ОТОБРАЖЕНИЯ на графике —
+переделать core/detectors/levels.py (_cluster_swings, _adaptive_tolerance) и отрисовку
+уровней в ui/chart.js по этим правилам. НЕ ПРИДУМЫВАТЬ СВОИ ПРАВИЛА — ждать ТЗ.
+
+### Технические заметки
+- bridge timeout был вызван синхронным build_from_klines в event loop → теперь
+  run_in_executor в ensure_levels; table_fields(full=False) для дешёвых строк
+- _levels_loop: sleep 60с (не 900), ensure_levels только для binance-кандидатов
+- levels data flow: indicator_data → {"price","lo","hi","touches","direction"};
+  get_chart → [{"price","lo","hi","touches","direction"}]
+- тесты: tests/test_levels.py (5), test_mm.py (5), test_strategy.py (7), test_news.py (6),
+  test_scanner.py (7), test_radar_history.py (6), test_robots_synthetic.py (5),
+  test_micro_detectors.py (7) — все зелёные
+- приложение запущено, ошибок нет; уровни строятся для ★-монет (levels loop работает)
+
+### При запуске завтра
+.venv/bin/python main.py — окно + бэкенд; лог: tail -f /tmp/screener_run.log
+Первым делом: получить у пользователя правила уровней → переделать levels.py + chart.js.

@@ -32,6 +32,12 @@ scanner:
   binance_priority: true # кандидаты Binance первыми
   market_rows_limit: 100 # строк во вкладках-рейтингах
 
+strategy:
+  atr_mult: 0.5          # допуск зоны уровня = 0.5 * ATR(14h)
+  mm_score_min: 30       # ММ считается "держащим" при score >= порога
+  news_window_h: 4       # окно новостей для вердикта
+  max_signals: 100       # максимум сигналов в истории
+
 history:
   path: history.db
   retention_h: 24            # хранить 24 часа

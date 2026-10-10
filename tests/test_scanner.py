@@ -90,7 +90,10 @@ class TestRadarHours(unittest.TestCase):
         for v in [50.0] * 24:
             cell.hours.append(v)
         cell.hour_vol = 500.0
-        self.assertAlmostEqual(cell.rvol(), 10.0)
+        # половина часа прошла -> экстраполяция 500/0.5=1000 -> 1000/50 = 20x
+        cell.hour_ts = base + 9 * 3600000
+        cell.last_ts = base + 9 * 3600000 + 1800000
+        self.assertAlmostEqual(cell.rvol(), 20.0)
 
 
 if __name__ == "__main__":

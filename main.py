@@ -60,6 +60,28 @@ class Bridge:
     def get_stats(self):
         return json.dumps(self._on_loop(self.screener.stats))
 
+    def get_verdict(self):
+        return json.dumps(self._on_loop(lambda: self.screener.verdict_data(self.screener.selected)))
+
+    def get_chart(self, key, limit=720):
+        def _build():
+            exch, sym = key.split(":", 1)
+            if exch != "binance":
+                return {"candles": [], "levels": [], "price": 0}
+            sl = self.screener.strategy.levels.get(exch, sym)
+            candles = sl.raw_klines[-int(limit):] if hasattr(sl, "raw_klines") else []
+            levels = [
+                {"price": round(l.price, 8), "lo": round(l.zone_lo, 8), "hi": round(l.zone_hi, 8),
+                 "touches": l.touches, "direction": l.direction}
+                for l in sl.significant(2)
+            ]
+            st = self.screener.store.get(exch, sym)
+            return {"candles": candles, "levels": levels, "price": st.last_price}
+        return json.dumps(self._on_loop(_build))
+
+    def get_signals(self):
+        return json.dumps(self._on_loop(self.screener.take_strategy_signals))
+
     def get_history(self, exchange, symbol, before_ms, limit=8000):
         return json.dumps(self._on_loop(
             lambda: self.screener.get_history(exchange, symbol, int(before_ms), int(limit))

@@ -14,9 +14,11 @@ from core.detectors.micro import MicroDetector
 from core.detectors.robots import RobotDetector
 from core.history import History
 from core.models import Trade
+from core.news import NewsWatcher
 from core.radar import Radar
 from core.scanner import Scanner
 from core.store import MarketStore
+from core.strategy import StrategyEngine
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +51,9 @@ class Screener:
         self.micro = MicroDetector(config.get("micro", {}))
         self.radar = Radar(float(monitor.get("radar_threshold", 50)))
         self.scanner = Scanner(self.radar, config.get("scanner", {}))
+        self.news = NewsWatcher(window_h=int(config.get("strategy", {}).get("news_window_h", 4)))
+        self.strategy = StrategyEngine(self, config.get("strategy", {}))
+        self.strategy.news = self.news
         self.history = History(
             path=hist_cfg.get("path", "history.db"),
             retention_h=int(hist_cfg.get("retention_h", 24)),
@@ -64,6 +69,8 @@ class Screener:
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self._maint_task: Optional[asyncio.Task] = None
         self._scan_task: Optional[asyncio.Task] = None
+        self._news_task: Optional[asyncio.Task] = None
+        self._levels_task: Optional[asyncio.Task] = None
         self._http_session = None
 
     async def _get_json(self, url: str):
@@ -89,6 +96,8 @@ class Screener:
             tasks.append(self._start_connector(conn))
         self._maint_task = self.loop.create_task(self._maintenance_loop())
         self._scan_task = self.loop.create_task(self.scanner.run_loop(self._get_json))
+        self._news_task = self.loop.create_task(self.news.poll_loop())
+        self._levels_task = self.loop.create_task(self._levels_loop())
         await asyncio.gather(*tasks)
 
     async def _start_connector(self, conn: BaseConnector) -> None:
@@ -138,6 +147,27 @@ class Screener:
         self.store.get(weakest[0], weakest[1]).drop_session()
         log.info("pool - %s:%s (evicted for scan)", weakest[0], weakest[1])
         return True
+
+    async def _levels_loop(self) -> None:
+        """Уровни + алиасы новостей для ★-монет: первое построение сразу после
+        появления кандидатов, обновление раз в 15 мин."""
+        klines_url = "https://fapi.binance.com/fapi/v1/klines?symbol={sym}&interval=1m&limit=1440"
+        while True:
+            try:
+                cands = self.scanner.candidates()[:80]
+                binance_cands = [(e, s) for e, s in cands if e == "binance"]
+                if cands:
+                    log.info("levels loop: %d candidates (%d binance)", len(cands), len(binance_cands))
+                for exch, sym in cands[:80]:
+                    if exch == "binance":
+                        await self.strategy.ensure_levels(exch, sym, self._get_json, klines_url)
+                    self.news.register_alias(sym)
+                    await asyncio.sleep(0.4)
+            except asyncio.CancelledError:
+                return
+            except Exception:
+                log.exception("levels loop failed")
+            await asyncio.sleep(60)
 
     def _promote_from_scanner(self) -> None:
         for key in self.scanner.candidates()[:50]:
@@ -198,12 +228,24 @@ class Screener:
         self.store.add_trade(trade)
         self.detector.on_trade(trade)
         self.micro.on_trade(trade)
+        try:
+            self.strategy.on_trade(exchange, symbol, ts_ms, price)
+            if self.scanner.matches(exchange, symbol):
+                self.strategy.mm(exchange, symbol).on_trade(trade)
+        except Exception:
+            log.exception("strategy on_trade failed")
 
     async def _on_book(self, exchange: str, symbol: str, book) -> None:
         if not self._in_scope(exchange, symbol):
             return
         self.store.add_book(exchange, symbol, book)
         self.micro.on_book(exchange, symbol, book)
+        try:
+            mm = self.strategy.mm_by_key.get((exchange, symbol))
+            if mm is not None or self.scanner.matches(exchange, symbol):
+                self.strategy.mm(exchange, symbol).on_book(book)
+        except Exception:
+            pass
 
     def _on_new_robot(self, signal) -> None:
         row = signal.to_row()
@@ -256,7 +298,19 @@ class Screener:
             "pool": len(self.pool),
             "robots": len(self.detector.all_signals()),
             "scan": self.scanner.match_count(),
+            "signals": len(self.strategy.signals),
         }
+
+    def verdict_data(self, key: Optional[str]) -> dict:
+        if key is None:
+            key = self.selected
+        if key is None:
+            return {"fields": None, "recent": []}
+        exchange, symbol = key.split(":", 1)
+        return self.strategy.verdict_panel(exchange, symbol)
+
+    def take_strategy_signals(self) -> List[dict]:
+        return self.strategy.all_signals()
 
     def symbol_list(self) -> List[dict]:
         out = []
@@ -354,6 +408,12 @@ class Screener:
         for row in rows:
             key = (row["exchange"].lower(), row["symbol"])
             row.update(self.scanner.match_details(*key))
+            # стратегия-поля: полный расчёт для ★/сигнальных строк, дешёвый для остальных
+            full = bool(row.get("match") or row.get("prints") or row.get("radar", 0) >= 25)
+            try:
+                row.update(self.strategy.table_fields(key[0], key[1], full=full))
+            except Exception:
+                row.update({"levels": 0, "approach": None, "mm_score": 0, "mm_holds": None, "news": None})
         now_ms = int(time.time() * 1000)
 
         def sort_key(r):
@@ -460,6 +520,12 @@ class Screener:
         else:
             new_trades = st.session[-5000:]
         ms = self.micro.state(exchange, symbol)
+        sl = self.strategy.levels.get(exchange, symbol)
+        sig_levels = [
+            {"price": round(l.price, 8), "lo": round(l.zone_lo, 8), "hi": round(l.zone_hi, 8),
+             "touches": l.touches, "direction": l.direction}
+            for l in sl.significant(2)
+        ]
         data = {
             "key": key,
             "full": after_ms <= 0,
@@ -467,9 +533,10 @@ class Screener:
             "bid": st.last_book.best_bid()[0] if st.last_book and st.last_book.best_bid() else None,
             "ask": st.last_book.best_ask()[0] if st.last_book and st.last_book.best_ask() else None,
             "trades": [
-                {"t": t.ts_ms, "s": t.size, "b": t.is_buy, "r": t.is_robot}
+                {"t": t.ts_ms, "p": t.price, "s": t.size, "b": t.is_buy, "r": t.is_robot}
                 for t in new_trades
             ],
+            "levels": sig_levels,
             "robots": [sig.to_row() for sig in self.detector.all_signals() if sig.exchange == exchange and sig.symbol == symbol],
             "micro": {
                 "hft": ms.hft, "hft_info": ms.hft_info,

@@ -47,7 +47,8 @@ body {
 main {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(480px, 1fr) minmax(420px, 1fr);
+  grid-template-columns: minmax(480px, 1fr) minmax(420px, 1.1fr);
+  grid-template-rows: minmax(200px, 1.1fr) minmax(200px, 1fr);
   gap: 1px;
   background: var(--border);
   min-height: 0;
@@ -58,6 +59,15 @@ section {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+#table-panel { grid-row: 1 / 3; }
+#chart-panel { border-bottom: 1px solid var(--border); }
+
+#chart {
+  flex: 1;
+  width: 100%;
+  display: block;
 }
 
 .panel-title {
@@ -159,6 +169,17 @@ tbody tr.new-robot { animation: flash 1.2s ease-out; }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
 .stats { color: var(--dim); white-space: nowrap; }
+
+.verdict {
+  padding: 6px 14px;
+  border-top: 1px solid var(--border);
+  line-height: 1.5;
+  min-height: 36px;
+  font-size: 11px;
+}
+.verdict-breakout { color: var(--gold); }
+.verdict-reject { color: var(--accent); }
+.warm { color: var(--accent); }
 
 .table-head-row {
   display: flex;

@@ -129,13 +129,19 @@ class RadarCell:
 
 
     def rvol(self) -> float:
-        """Относительный объём: текущий час / средний завершённый час."""
+        """Относительный объём: текущий час (экстраполированный) / средний завершённый час."""
         if not self.hours:
             return 0.0
         avg = sum(self.hours) / len(self.hours)
         if avg <= 0:
             return 0.0
-        return self.hour_vol / avg
+        # нормализация на прошедшую долю часа — иначе rvol растёт линейно от начала часа
+        if self.last_ts and self.hour_ts:
+            elapsed_s = (self.last_ts - self.hour_ts) / 1000.0
+            frac = max(min(elapsed_s / 3600.0, 1.0), 1 / 60.0)
+        else:
+            frac = 1.0
+        return (self.hour_vol / frac) / avg
 
     def seed_hours(self, hourly_vols: List[float], current_vol: float = 0.0, now_ms: int = 0) -> None:
         """Bootstrap базы средних из часовых klines."""
